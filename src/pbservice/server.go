@@ -22,7 +22,7 @@ type PBServer struct {
 	me         string
 	vs         *viewservice.Clerk
 	// Your declarations here.
-	viewnum int32
+	viewnum uint
 	kv      map[string]string
 	status  int32  // 1 primary, 2 backup, 0 offline
 	primary string // name of primary server (if not this one)
@@ -99,19 +99,19 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 func (pb *PBServer) tick() {
 
 	// ping view service
-	current_view := pb.vs.Ping(pb.viewnum) // need to somehow increment this and make it related to viewnum of viewserver
+	current_view, _ := pb.vs.Ping(pb.viewnum) // need to somehow increment this and make it related to viewnum of viewserver
 	pb.viewnum = current_view.Viewnum
 	pb.primary = current_view.Primary
 	pb.backup = current_view.Backup
 	// check if this server is primary or backup
 	// this will influence what kind of puts/gets it accepts and how to respond....?
-	if me == primary {
+	if pb.me == pb.primary {
 		//we are primary server
-		status := 1
-	} else if me == backup {
-		status := 2
+		pb.status = 1
+	} else if pb.me == pb.backup {
+		pb.status = 2
 	} else {
-		status := 0
+		pb.status = 0
 	}
 
 }

@@ -78,7 +78,7 @@ func (ck *Clerk) Get(key string) string {
 	args := GetArgs{key, "Client", nrand()}
 	var reply GetReply
 	for {
-		err := call(ck.primary, "PBServer.Get", &args, &reply)
+		call(ck.primary, "PBServer.Get", &args, &reply)
 		if reply.Err == OK {
 			return reply.Value // empty string if key does not exist
 		} else if reply.Err == ErrWrongServer {
@@ -97,7 +97,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
 	}
-	args := PutAppendArgs{key, value, op, nrand()}
+	args := PutAppendArgs{key, value, "Client", op, nrand()}
 	var reply PutAppendReply
 	for {
 		call(ck.primary, "PBServer.PutAppend", &args, &reply)
