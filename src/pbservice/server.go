@@ -40,6 +40,10 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 			reply.Err = ErrNoKey
 		}
 		args.Caller = pb.me
+		if pb.backup == "" {
+			reply.Err = OK
+			return nil
+		}
 		call(pb.backup, "PBServer.Get", args, reply)
 	} else if pb.status == 2 {
 		//do backup work
@@ -62,24 +66,36 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 }
 
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
-
 	// Your code here.
 	if pb.status == 1 {
 		//do primary work
-		if args.Put == "Put" {
-			pb.kv[args.Key] = args.Value
+		if pb.kv == nil {
+			newKV := make(map[string]string)
+			newKV[args.Key] = args.Value
+			pb.kv = newKV
 		} else {
-			pb.kv[args.Key] += args.Value
+			if args.Put == "Put" {
+				pb.kv[args.Key] = args.Value
+			} else {
+				pb.kv[args.Key] += args.Value
+			}
 		}
+		reply.Err = OK
 		args.Caller = pb.me
 		call(pb.backup, "PBServer.PutAppend", args, reply)
 	} else if pb.status == 2 {
 		//do backup work
 		if args.Caller == pb.primary {
-			if args.Put == "Put" {
-				pb.kv[args.Key] = args.Value
+			if pb.kv == nil {
+				newKV := make(map[string]string)
+				newKV[args.Key] = args.Value
+				pb.kv = newKV
 			} else {
-				pb.kv[args.Key] += args.Value
+				if args.Put == "Put" {
+					pb.kv[args.Key] = args.Value
+				} else {
+					pb.kv[args.Key] += args.Value
+				}
 			}
 			reply.Err = OK
 		} else {
