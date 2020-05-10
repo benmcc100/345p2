@@ -60,15 +60,15 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		if args.Caller == pb.primary {
 			//primary has forwarded call to us, verify we have same value for that key
 			value, err := pb.kv[args.Key]
-			backupReply.Value = value
+			reply.Value = value
 			if err {
-				backupReply.Err = ErrNoKey
+				reply.Err = ErrNoKey
 			} else {
-				backupReply.Err = OK
+				reply.Err = OK
 			}
 		} else {
 			// only handle get if its forwarded from primary
-			backupReply.Err = ErrWrongServer
+			reply.Err = ErrWrongServer
 		}
 	}
 
