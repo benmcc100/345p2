@@ -1,18 +1,17 @@
 package pbservice
 
-import "viewservice"
-import "net/rpc"
-import "fmt"
-
-import "crypto/rand"
-import "math/big"
-
+import (
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"net/rpc"
+	"viewservice"
+)
 
 type Clerk struct {
 	vs *viewservice.Clerk
 	// Your declarations here
-	primary	string
-
+	primary string
 }
 
 // this may come in handy.
@@ -30,7 +29,6 @@ func MakeClerk(vshost string, me string) *Clerk {
 
 	return ck
 }
-
 
 //
 // call() sends an RPC to the rpcname handler on server srv
@@ -74,21 +72,19 @@ func call(srv string, rpcname string,
 // says the key doesn't exist (has never been Put().
 //
 func (ck *Clerk) Get(key string) string {
-	if (ck.primary == "") {
+	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
 	}
 	args := GetArgs{key, "Client", nrand()}
 	var reply GetReply
 	for {
-		err = call(ck.primary, "PBServer.Get", &args, &reply)
-		if (reply.Err == OK) {
+		err := call(ck.primary, "PBServer.Get", &args, &reply)
+		if reply.Err == OK {
 			return reply.Value // empty string if key does not exist
-		}
-		else if (reply.Err == ErrWrongServer) {
+		} else if reply.Err == ErrWrongServer {
 			// we have the wrong primary cached
 			ck.primary = ck.vs.Primary()
-		}
-		else if (reply.Err == ErrNoKey) {
+		} else if reply.Err == ErrNoKey {
 			return ""
 		}
 	}
@@ -98,17 +94,16 @@ func (ck *Clerk) Get(key string) string {
 // send a Put or Append RPC
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	if (ck.primary == "") {
+	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
 	}
 	args := PutAppendArgs{key, value, op, nrand()}
 	var reply PutAppendReply
 	for {
-		err = call(ck.primary, "PBServer.PutAppend", &args, &reply)
-		if (reply.Err == OK) {
+		call(ck.primary, "PBServer.PutAppend", &args, &reply)
+		if reply.Err == OK {
 			return
-		}
-		else if (reply.Err == ErrWrongServer) {
+		} else if reply.Err == ErrWrongServer {
 			ck.primary = ck.vs.Primary()
 		}
 	}
