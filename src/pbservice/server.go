@@ -43,22 +43,32 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		if pb.backup == "" {
 			reply.Err = OK
 			return nil
+		} else {
+			forwardArgs := GetForward{args.Key, pb.primary, args.ID}
+			var backupReply GetReply
+			call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
+			if backupReply.Err == OK {
+				reply.Err = OK
+			} else if backupReply.Err == ErrWrongServer {
+				// the viewservice is outdated, need to ping or something
+			} else if backupReply.Err == ErrNoKey {
+				// backup is out of date
+			}
 		}
-		call(pb.backup, "PBServer.Get", args, reply)
 	} else if pb.status == 2 {
 		//do backup work
 		if args.Caller == pb.primary {
 			//primary has forwarded call to us, verify we have same value for that key
 			value, err := pb.kv[args.Key]
-			reply.Value = value
+			backupReply.Value = value
 			if err {
-				reply.Err = ErrNoKey
+				backupReply.Err = ErrNoKey
 			} else {
-				reply.Err = OK
+				backupReply.Err = OK
 			}
 		} else {
 			// only handle get if its forwarded from primary
-			reply.Err = ErrWrongServer
+			backupReply.Err = ErrWrongServer
 		}
 	}
 
@@ -80,9 +90,21 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 				pb.kv[args.Key] += args.Value
 			}
 		}
-		reply.Err = OK
-		args.Caller = pb.me
-		call(pb.backup, "PBServer.PutAppend", args, reply)
+		if pb.backup == "" {
+			reply.Err = OK
+			return nil
+		} else {
+			forwardArgs := PutAppendForward{args.Key, args.Value, pb.me, args.Put, args.ID}
+			var backupReply PutAppendReply
+			call(pb.backup, "PBServer.PutAppend", forwardArgs, backupReply)
+			if backupReply.Err == OK {
+				reply.Err = OK
+			} else if backupReply.Err == ErrWrongServer {
+				// the viewservice is outdated, need to ping or something
+			} else if backupReply.Err == ErrNoKey {
+				// backup is out of date
+			}
+		}
 	} else if pb.status == 2 {
 		//do backup work
 		if args.Caller == pb.primary {
