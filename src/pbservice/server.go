@@ -33,6 +33,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 	// Your code here.
 	if pb.status == 1 {
+		fmt.Println()
 		//do primary work
 		value, err := pb.kv[args.Key]
 		reply.Value = value
@@ -42,8 +43,10 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		args.Caller = pb.me
 		if pb.backup == "" {
 			reply.Err = OK
+			fmt.Println("Get retrieved from primary, no backup yet")
 			return nil
 		} else {
+			fmt.Println("Checking for backup on get call")
 			forwardArgs := GetForward{args.Key, pb.primary, args.ID}
 			var backupReply GetReply
 			call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
@@ -56,6 +59,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 			}
 		}
 	} else if pb.status == 2 {
+		fmt.Println("Get check recieved by backup")
 		//do backup work
 		if args.Caller == pb.primary {
 			//primary has forwarded call to us, verify we have same value for that key
@@ -92,11 +96,13 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		}
 		if pb.backup == "" {
 			reply.Err = OK
+			fmt.Println("Successful put")
 			return nil
 		} else {
+			fmt.Println("Forwarding put to backup")
 			forwardArgs := PutAppendForward{args.Key, args.Value, pb.me, args.Put, args.ID}
 			var backupReply PutAppendReply
-			call(pb.backup, "PBServer.PutAppend", forwardArgs, backupReply)
+			call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
 			if backupReply.Err == OK {
 				reply.Err = OK
 			} else if backupReply.Err == ErrWrongServer {
@@ -106,6 +112,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 			}
 		}
 	} else if pb.status == 2 {
+		fmt.Println("put recieved by backup")
 		//do backup work
 		if args.Caller == pb.primary {
 			if pb.kv == nil {
