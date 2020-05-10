@@ -13,7 +13,7 @@ type PutAppendArgs struct {
 	Key   string
 	Value string
 	// You'll have to add definitions here.
-
+	Put   bool
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
 }
@@ -25,6 +25,8 @@ type PutAppendReply struct {
 type GetArgs struct {
 	Key string
 	// You'll have to add definitions here.
+	Caller string // id of server making call
+	// something to make get calls unique
 }
 
 type GetReply struct {

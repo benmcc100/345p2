@@ -23,13 +23,40 @@ type PBServer struct {
 	vs         *viewservice.Clerk
 	// Your declarations here.
 	viewnum	   int32
-
+	kv	       map[string]string
+	status	   int32 // 1 primary, 2 backup, 0 offline
+	primary    string // name of primary server (if not this one)
+	backup     string // name of backup
 }
 
 
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 	// Your code here.
+	if (status == 1) {
+		//do primary work
+		reply.Value, err = kv[args.Key]
+		if (err != nil) {
+			reply.Value = ""
+		}
+		args.Caller = me
+		call(backup, "PBServer.Get", args, reply)
+	}
+	else if (status == 2) {
+		//do backup work
+		if (args.Caller == primary) {
+			//primary has forwarded call to us, verify we have same value for that key
+			reply.Value, err = kv[args.Key]
+			if (err != nil) {
+				reply.Value = ""
+			}
+			reply.Err = OK
+		}
+		else {
+			// only handle get if its forwarded from primary
+			reply.Err = ErrWrongServer
+		}	
+	}
 
 	return nil
 }
@@ -38,7 +65,32 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
 
 	// Your code here.
-
+	if (status == 1) {
+		//do primary work
+		if (args.Put) {
+			kv[args.Key] = args.Value
+		}
+		else {
+			kv[args.Key] += args.Value
+		}
+		args.Caller = me
+		call(backup, "PBServer.PutAppend", args, reply)
+	}
+	else if (status == 2) {
+		//do backup work
+		if (args.Caller == primary) {
+			if (args.Put) {
+				kv[args.Key] = args.Value
+			}
+			else {
+				kv[args.Key] += args.Value
+			}
+			reply.Err = OK
+		}
+		else {
+			reply.Err = ErrWrongServer
+		}
+	}
 
 	return nil
 }
@@ -55,10 +107,20 @@ func (pb *PBServer) tick() {
 	// ping view service
 	current_view := pb.vs.Ping(pb.viewnum) // need to somehow increment this and make it related to viewnum of viewserver
 	pb.viewnum = current_view.Viewnum
-	primary := current_view.Primary
-	backup := current_view.Backup
+	primary = current_view.Primary
+	backup = current_view.Backup
 	// check if this server is primary or backup
 	// this will influence what kind of puts/gets it accepts and how to respond....?
+	if (me == primary) {
+		//we are primary server
+		status = 1
+	}
+	else if (me == backup) {
+		status = 2
+	}
+	else {
+		status = 0
+	}
 
 }
 
