@@ -37,7 +37,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		//do primary work
 		reply.Value, err = kv[args.Key]
 		if (err != nil) {
-			reply.Value = ""
+			reply.Err = ErrNoKey
 		}
 		args.Caller = me
 		call(backup, "PBServer.Get", args, reply)
@@ -48,9 +48,11 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 			//primary has forwarded call to us, verify we have same value for that key
 			reply.Value, err = kv[args.Key]
 			if (err != nil) {
-				reply.Value = ""
+				reply.Err = ErrNoKey
 			}
-			reply.Err = OK
+			else {
+				reply.Err = OK
+			}
 		}
 		else {
 			// only handle get if its forwarded from primary
@@ -67,7 +69,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	// Your code here.
 	if (status == 1) {
 		//do primary work
-		if (args.Put) {
+		if (args.Put == "Put") {
 			kv[args.Key] = args.Value
 		}
 		else {
@@ -79,7 +81,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	else if (status == 2) {
 		//do backup work
 		if (args.Caller == primary) {
-			if (args.Put) {
+			if (args.Put == "Put") {
 				kv[args.Key] = args.Value
 			}
 			else {

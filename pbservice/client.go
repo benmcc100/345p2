@@ -11,6 +11,8 @@ import "math/big"
 type Clerk struct {
 	vs *viewservice.Clerk
 	// Your declarations here
+	primary	string
+
 }
 
 // this may come in handy.
@@ -72,18 +74,44 @@ func call(srv string, rpcname string,
 // says the key doesn't exist (has never been Put().
 //
 func (ck *Clerk) Get(key string) string {
-
-	// Your code here.
-
-	return "???"
+	if (ck.primary == "") {
+		ck.primary = ck.vs.Primary()
+	}
+	args := GetArgs{key, "Client", nrand()}
+	var reply GetReply
+	for {
+		err = call(ck.primary, "PBServer.Get", &args, &reply)
+		if (reply.Err == OK) {
+			return reply.Value // empty string if key does not exist
+		}
+		else if (reply.Err == ErrWrongServer) {
+			// we have the wrong primary cached
+			ck.primary = ck.vs.Primary()
+		}
+		else if (reply.Err == ErrNoKey) {
+			return ""
+		}
+	}
 }
 
 //
 // send a Put or Append RPC
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-
-	// Your code here.
+	if (ck.primary == "") {
+		ck.primary = ck.vs.Primary()
+	}
+	args := PutAppendArgs{key, value, op, nrand()}
+	var reply PutAppendReply
+	for {
+		err = call(ck.primary, "PBServer.PutAppend", &args, &reply)
+		if (reply.Err == OK) {
+			return
+		}
+		else if (reply.Err == ErrWrongServer) {
+			ck.primary = ck.vs.Primary()
+		}
+	}
 }
 
 //
