@@ -24,6 +24,7 @@ type PBServer struct {
 	// Your declarations here.
 	viewnum uint
 	kv      map[string]string
+	callIDs map[int64]bool
 	status  int32  // 1 primary, 2 backup, 0 offline
 	primary string // name of primary server (if not this one)
 	backup  string // name of backup
@@ -33,8 +34,15 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 	// Your code here.
 	if pb.status == 1 {
 		//do primary work
+		if pb.callIDs[args.ID] {
+			// we've seen this put request, discard it
+			return nil
+		}
+		pb.mu.Lock()
 		value, err := pb.kv[args.Key]
 		reply.Value = value
+		pb.callIDs[args.ID] = true
+		pb.mu.Unlock()
 		if err {
 			reply.Err = ErrNoKey
 		}
@@ -59,11 +67,13 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		//do backup work
 		if args.Caller == pb.primary {
 			//primary has forwarded call to us, verify we have same value for that key
+			pb.mu.Lock()
 			if args.PrimaryValue == pb.kv[args.Key] {
 				reply.Err = OK
 			} else {
 				reply.Err = ErrNoKey
 			}
+			pb.mu.Unlock()
 		} else {
 			// only handle get if its forwarded from primary
 			reply.Err = ErrWrongServer
@@ -77,6 +87,11 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	// Your code here.
 	if pb.status == 1 {
 		//do primary work
+		if pb.callIDs[args.ID] {
+			// we've seen this put request, discard it
+			return nil
+		}
+		pb.mu.Lock()
 		if pb.kv == nil {
 			newKV := make(map[string]string)
 			newKV[args.Key] = args.Value
@@ -88,6 +103,8 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 				pb.kv[args.Key] += args.Value
 			}
 		}
+		pb.callIDs[args.ID] = true
+		pb.mu.Unlock()
 		if pb.backup == "" {
 			reply.Err = OK
 			return nil
@@ -108,6 +125,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	} else if pb.status == 2 {
 		//do backup work
 		if args.Caller == pb.primary {
+			pb.mu.Lock()
 			if pb.kv == nil {
 				newKV := make(map[string]string)
 				newKV[args.Key] = args.Value
@@ -119,12 +137,28 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 					pb.kv[args.Key] += args.Value
 				}
 			}
+			pb.mu.Unlock()
 			reply.Err = OK
 		} else {
 			reply.Err = ErrWrongServer
 		}
 	}
 
+	return nil
+}
+
+func (pb *PBServer) TransferKV(args *TransferKVArgs, reply *TransferReply) error {
+	if pb.status == 1 {
+		//we think we're primary, error
+		reply.Err = ErrWrongServer
+	} else if pb.status == 2 {
+		//update our KV to match primary's
+		pb.mu.Lock()
+		pb.callIDs = args.CallIDs
+		pb.kv = args.KV
+		pb.mu.Unlock()
+		reply.Err = OK
+	}
 	return nil
 }
 
@@ -146,13 +180,17 @@ func (pb *PBServer) tick() {
 	if pb.me == pb.primary {
 		//we are primary server
 		pb.status = 1
-		fmt.Println("I am primary")
+		args := TransferKVArgs{pb.callIDs, pb.kv}
+		var treply TransferReply
+		call(pb.backup, "PBServer.TransferKV", &args, &treply)
+		if treply.Err == OK {
+			fmt.Println("successful database replication")
+		} else {
+		}
 	} else if pb.me == pb.backup {
 		pb.status = 2
-		fmt.Println("I am backup")
 	} else {
 		pb.status = 0
-		fmt.Println("I am offline")
 	}
 
 }
@@ -188,6 +226,7 @@ func StartServer(vshost string, me string) *PBServer {
 	pb.vs = viewservice.MakeClerk(me, vshost)
 	// Your pb.* initializations here.
 	pb.viewnum = 0
+	pb.callIDs = make(map[int64]bool)
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(pb)

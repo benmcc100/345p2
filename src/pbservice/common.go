@@ -38,6 +38,15 @@ type GetReply struct {
 	Value string
 }
 
+type TransferKVArgs struct {
+	CallIDs map[int64]bool
+	KV      map[string]string
+}
+
+type TransferReply struct {
+	Err Err
+}
+
 // Your RPC definitions here.
 /*
 type GetForward struct {

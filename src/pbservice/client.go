@@ -75,7 +75,6 @@ func call(srv string, rpcname string,
 func (ck *Clerk) Get(key string) string {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
-		fmt.Println("Client checking for primary")
 	}
 	args := GetArgs{key, "", "Client", nrand()}
 	var reply GetReply
@@ -83,7 +82,6 @@ func (ck *Clerk) Get(key string) string {
 		err := call(ck.primary, "PBServer.Get", &args, &reply)
 		if !err {
 			ck.primary = ck.vs.Primary()
-			fmt.Println("Client checking for primary")
 			time.Sleep(viewservice.PingInterval)
 		}
 		if reply.Err == OK {
@@ -92,7 +90,6 @@ func (ck *Clerk) Get(key string) string {
 		} else if reply.Err == ErrWrongServer {
 			// we have the wrong primary cached
 			ck.primary = ck.vs.Primary()
-			fmt.Println("Client checking for primary")
 			time.Sleep(viewservice.PingInterval)
 		} else if reply.Err == ErrNoKey {
 			return ""
@@ -106,7 +103,6 @@ func (ck *Clerk) Get(key string) string {
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
-		fmt.Println("Client checking for primary")
 	}
 	args := PutAppendArgs{key, value, "Client", op, nrand()}
 	var reply PutAppendReply
@@ -117,7 +113,6 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 			return
 		} else if reply.Err == ErrWrongServer {
 			ck.primary = ck.vs.Primary()
-			fmt.Println("Client checking for primary")
 			time.Sleep(viewservice.PingInterval)
 		}
 	}
