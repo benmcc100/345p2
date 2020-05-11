@@ -33,7 +33,6 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 	// Your code here.
 	if pb.status == 1 {
-		fmt.Println()
 		//do primary work
 		value, err := pb.kv[args.Key]
 		reply.Value = value
@@ -43,32 +42,28 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		args.Caller = pb.me
 		if pb.backup == "" {
 			reply.Err = OK
-			fmt.Println("Get retrieved from primary, no backup yet")
 			return nil
-		} else {
-			fmt.Println("Checking for backup on get call")
-			forwardArgs := GetForward{args.Key, pb.primary, args.ID}
-			var backupReply GetReply
-			call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
-			if backupReply.Err == OK {
-				reply.Err = OK
-			} else if backupReply.Err == ErrWrongServer {
-				// the viewservice is outdated, need to ping or something
-			} else if backupReply.Err == ErrNoKey {
-				// backup is out of date
-			}
+		}
+
+		forwardArgs := GetArgs{args.Key, value, pb.primary, args.ID}
+		var backupReply GetReply
+		call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
+		if backupReply.Err == OK {
+			reply.Err = OK
+			return nil
+		} else if backupReply.Err == ErrWrongServer {
+			// the viewservice is outdated, need to ping or something
+		} else if backupReply.Err == ErrNoKey {
+			// backup is out of date
 		}
 	} else if pb.status == 2 {
-		fmt.Println("Get check recieved by backup")
 		//do backup work
 		if args.Caller == pb.primary {
 			//primary has forwarded call to us, verify we have same value for that key
-			value, err := pb.kv[args.Key]
-			reply.Value = value
-			if err {
-				reply.Err = ErrNoKey
-			} else {
+			if args.PrimaryValue == pb.kv[args.Key] {
 				reply.Err = OK
+			} else {
+				reply.Err = ErrNoKey
 			}
 		} else {
 			// only handle get if its forwarded from primary
@@ -96,23 +91,22 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		}
 		if pb.backup == "" {
 			reply.Err = OK
-			fmt.Println("Successful put")
 			return nil
-		} else {
-			fmt.Println("Forwarding put to backup")
-			forwardArgs := PutAppendForward{args.Key, args.Value, pb.me, args.Put, args.ID}
-			var backupReply PutAppendReply
-			call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
-			if backupReply.Err == OK {
-				reply.Err = OK
-			} else if backupReply.Err == ErrWrongServer {
-				// the viewservice is outdated, need to ping or something
-			} else if backupReply.Err == ErrNoKey {
-				// backup is out of date
-			}
+		}
+		forwardArgs := PutAppendArgs{args.Key, args.Value, pb.me, args.Put, args.ID}
+		var backupReply PutAppendReply
+		call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
+		if backupReply.Err == OK {
+			reply.Err = OK
+			return nil
+		} else if backupReply.Err == ErrWrongServer {
+			fmt.Println("error")
+			// the viewservice is outdated, need to ping or something
+		} else if backupReply.Err == ErrNoKey {
+			fmt.Println("error")
+			// backup is out of date
 		}
 	} else if pb.status == 2 {
-		fmt.Println("put recieved by backup")
 		//do backup work
 		if args.Caller == pb.primary {
 			if pb.kv == nil {
@@ -144,10 +138,10 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 func (pb *PBServer) tick() {
 
 	// ping view service
-	current_view, _ := pb.vs.Ping(pb.viewnum) // need to somehow increment this and make it related to viewnum of viewserver
-	pb.viewnum = current_view.Viewnum
-	pb.primary = current_view.Primary
-	pb.backup = current_view.Backup
+	currentView, _ := pb.vs.Ping(pb.viewnum) // need to somehow increment this and make it related to viewnum of viewserver
+	pb.viewnum = currentView.Viewnum
+	pb.primary = currentView.Primary
+	pb.backup = currentView.Backup
 	// check if this server is primary or backup
 	// this will influence what kind of puts/gets it accepts and how to respond....?
 	if pb.me == pb.primary {

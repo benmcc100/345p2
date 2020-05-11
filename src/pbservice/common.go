@@ -25,7 +25,8 @@ type PutAppendReply struct {
 }
 
 type GetArgs struct {
-	Key string
+	Key          string
+	PrimaryValue string
 	// You'll have to add definitions here.
 	Caller string // id of server making call
 	// something to make get calls unique
@@ -38,12 +39,12 @@ type GetReply struct {
 }
 
 // Your RPC definitions here.
+/*
 type GetForward struct {
-	Key string
-	// You'll have to add definitions here.
-	Caller string // id of server making call
-	// something to make get calls unique
-	ID int64
+	Key          string
+	PrimaryValue string
+	Caller       string // id of server making call
+	ID           int64
 }
 
 type PutAppendForward struct {
@@ -56,3 +57,4 @@ type PutAppendForward struct {
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
 }
+*/

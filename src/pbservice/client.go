@@ -64,7 +64,7 @@ func call(srv string, rpcname string,
 	return false
 }
 
-//
+// Get :
 // fetch a key's value from the current primary;
 // if they key has never been set, return "".
 // Get() must keep trying until it either the
@@ -75,7 +75,7 @@ func (ck *Clerk) Get(key string) string {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
 	}
-	args := GetArgs{key, "Client", nrand()}
+	args := GetArgs{key, "", "Client", nrand()}
 	var reply GetReply
 	for {
 		call(ck.primary, "PBServer.Get", &args, &reply)
