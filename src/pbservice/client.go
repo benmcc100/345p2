@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/rpc"
+	"time"
 	"viewservice"
 )
 
@@ -74,16 +75,25 @@ func call(srv string, rpcname string,
 func (ck *Clerk) Get(key string) string {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
+		fmt.Println("Client checking for primary")
 	}
 	args := GetArgs{key, "", "Client", nrand()}
 	var reply GetReply
 	for {
-		call(ck.primary, "PBServer.Get", &args, &reply)
+		err := call(ck.primary, "PBServer.Get", &args, &reply)
+		if !err {
+			ck.primary = ck.vs.Primary()
+			fmt.Println("Client checking for primary")
+			time.Sleep(viewservice.PingInterval)
+		}
 		if reply.Err == OK {
+			fmt.Println("Successful client get")
 			return reply.Value // empty string if key does not exist
 		} else if reply.Err == ErrWrongServer {
 			// we have the wrong primary cached
 			ck.primary = ck.vs.Primary()
+			fmt.Println("Client checking for primary")
+			time.Sleep(viewservice.PingInterval)
 		} else if reply.Err == ErrNoKey {
 			return ""
 		}
@@ -96,15 +106,19 @@ func (ck *Clerk) Get(key string) string {
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
+		fmt.Println("Client checking for primary")
 	}
 	args := PutAppendArgs{key, value, "Client", op, nrand()}
 	var reply PutAppendReply
 	for {
 		call(ck.primary, "PBServer.PutAppend", &args, &reply)
 		if reply.Err == OK {
+			fmt.Println("Successful client put")
 			return
 		} else if reply.Err == ErrWrongServer {
 			ck.primary = ck.vs.Primary()
+			fmt.Println("Client checking for primary")
+			time.Sleep(viewservice.PingInterval)
 		}
 	}
 }

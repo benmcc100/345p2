@@ -30,7 +30,6 @@ type PBServer struct {
 }
 
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
-
 	// Your code here.
 	if pb.status == 1 {
 		//do primary work
@@ -147,10 +146,13 @@ func (pb *PBServer) tick() {
 	if pb.me == pb.primary {
 		//we are primary server
 		pb.status = 1
+		fmt.Println("I am primary")
 	} else if pb.me == pb.backup {
 		pb.status = 2
+		fmt.Println("I am backup")
 	} else {
 		pb.status = 0
+		fmt.Println("I am offline")
 	}
 
 }
