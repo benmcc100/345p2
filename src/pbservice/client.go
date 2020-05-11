@@ -104,17 +104,26 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
 	}
-	args := PutAppendArgs{key, value, "Client", op, nrand()}
+	randID := nrand()
 	var reply PutAppendReply
 	for {
-		call(ck.primary, "PBServer.PutAppend", &args, &reply)
+		args := PutAppendArgs{key, value, "Client", op, randID}
+		err := call(ck.primary, "PBServer.PutAppend", &args, &reply)
+		if !err {
+			ck.primary = ck.vs.Primary()
+		}
 		if reply.Err == OK {
-			fmt.Println("Successful client put")
+			fmt.Printf("Successful client put with key %s and value %s\n", key, value)
 			return
 		} else if reply.Err == ErrWrongServer {
 			ck.primary = ck.vs.Primary()
 			time.Sleep(viewservice.PingInterval)
 		}
+		if reply.Err == ErrRepeatCall {
+			// the call went through!
+			return
+		}
+		time.Sleep(viewservice.PingInterval)
 	}
 }
 

@@ -36,6 +36,7 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 		//do primary work
 		if pb.callIDs[args.ID] {
 			// we've seen this put request, discard it
+			fmt.Println("REPEATED CALL")
 			return nil
 		}
 		pb.mu.Lock()
@@ -87,23 +88,28 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	// Your code here.
 	if pb.status == 1 {
 		//do primary work
-		if pb.callIDs[args.ID] {
+		fmt.Printf("I am primary and my current kv is: %v\n", pb.kv)
+		if _, prs := pb.callIDs[args.ID]; prs {
 			// we've seen this put request, discard it
+			fmt.Printf("REPEATED PUT CALL for key %s\n", args.Key)
+			reply.Err = ErrRepeatCall
 			return nil
 		}
 		pb.mu.Lock()
 		if pb.kv == nil {
 			newKV := make(map[string]string)
 			newKV[args.Key] = args.Value
+			pb.callIDs[args.ID] = true
 			pb.kv = newKV
 		} else {
 			if args.Put == "Put" {
 				pb.kv[args.Key] = args.Value
+				pb.callIDs[args.ID] = true
 			} else {
 				pb.kv[args.Key] += args.Value
+				pb.callIDs[args.ID] = true
 			}
 		}
-		pb.callIDs[args.ID] = true
 		pb.mu.Unlock()
 		if pb.backup == "" {
 			reply.Err = OK
@@ -184,7 +190,6 @@ func (pb *PBServer) tick() {
 		var treply TransferReply
 		call(pb.backup, "PBServer.TransferKV", &args, &treply)
 		if treply.Err == OK {
-			fmt.Println("successful database replication")
 		} else {
 		}
 	} else if pb.me == pb.backup {
