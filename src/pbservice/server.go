@@ -33,9 +33,10 @@ type PBServer struct {
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 	// Your code here.
 	if pb.status == 1 {
+		fmt.Printf("GET: I am primary with id %s and my current kv is: %v\n", pb.me, pb.kv)
 		//do primary work
 		if pb.callIDs[args.ID] {
-			// we've seen this put request, discard it
+			// we've seen this call request, discard it
 			fmt.Println("REPEATED CALL")
 			return nil
 		}
@@ -55,7 +56,12 @@ func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
 
 		forwardArgs := GetArgs{args.Key, value, pb.primary, args.ID}
 		var backupReply GetReply
-		call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
+		backupErr := call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
+		if !backupErr {
+			// backup has failed, client doesn't need to know...
+			reply.Err = OK
+			return nil
+		}
 		if backupReply.Err == OK {
 			reply.Err = OK
 			return nil
@@ -88,7 +94,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 	// Your code here.
 	if pb.status == 1 {
 		//do primary work
-		fmt.Printf("I am primary and my current kv is: %v\n", pb.kv)
+		fmt.Printf("I am primary with id %s and my current kv is: %v\n", pb.me, pb.kv)
 		if _, prs := pb.callIDs[args.ID]; prs {
 			// we've seen this put request, discard it
 			fmt.Printf("REPEATED PUT CALL for key %s\n", args.Key)
@@ -117,7 +123,13 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		}
 		forwardArgs := PutAppendArgs{args.Key, args.Value, pb.me, args.Put, args.ID}
 		var backupReply PutAppendReply
-		call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
+		backupErr := call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
+		if !backupErr {
+			// the backup has gone offline
+			fmt.Println("error sending put to backup")
+			reply.Err = OK // client doesn't need to know...
+			return nil
+		}
 		if backupReply.Err == OK {
 			reply.Err = OK
 			return nil
@@ -130,6 +142,7 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		}
 	} else if pb.status == 2 {
 		//do backup work
+		fmt.Printf("I am backup with id %s and my current kv is: %v\n", pb.me, pb.kv)
 		if args.Caller == pb.primary {
 			pb.mu.Lock()
 			if pb.kv == nil {
