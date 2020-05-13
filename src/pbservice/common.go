@@ -4,7 +4,6 @@ const (
 	OK             = "OK"
 	ErrNoKey       = "ErrNoKey"
 	ErrWrongServer = "ErrWrongServer"
-	ErrRepeatCall  = "ErrRepeatCall"
 )
 
 type Err string
@@ -26,8 +25,8 @@ type PutAppendReply struct {
 }
 
 type GetArgs struct {
-	Key          string
-	PrimaryValue string
+	Key string
+	//PrimaryValue string
 	// You'll have to add definitions here.
 	Caller string // id of server making call
 	// something to make get calls unique

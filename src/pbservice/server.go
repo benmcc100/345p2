@@ -31,72 +31,47 @@ type PBServer struct {
 }
 
 func (pb *PBServer) Get(args *GetArgs, reply *GetReply) error {
-	// Your code here.
 	if pb.status == 1 {
-		//fmt.Printf("GET: I am primary with id %s and my current kv is: %v\n", pb.me, pb.kv)
-		//do primary work
 		pb.mu.Lock()
 		defer pb.mu.Unlock()
-		if pb.callIDs[args.ID] {
-			// we've seen this call request, discard it
-			//fmt.Println("REPEATED CALL")
-			return nil
+		// send get request to backup if there is a backup.
+		if pb.backup != "" {
+			forwardArgs := GetArgs{args.Key, pb.primary, args.ID}
+			var backupReply GetReply
+			call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
+			reply.Err = backupReply.Err
+			reply.Value = backupReply.Value
+			pb.callIDs[args.ID] = true
+		} else {
+			value, err := pb.kv[args.Key]
+			//fmt.Println(value)
+			//fmt.Println(err)
+			reply.Value = value
+			pb.callIDs[args.ID] = true
+			if !err {
+				reply.Err = ErrNoKey
+			} else {
+				reply.Err = OK
+			}
 		}
-		//pb.mu.Lock()
+	} else if pb.status == 2 {
+		pb.mu.Lock()
+		defer pb.mu.Unlock()
 		value, err := pb.kv[args.Key]
 		reply.Value = value
 		pb.callIDs[args.ID] = true
-		//pb.mu.Unlock()
-		if err {
+		if !err {
 			reply.Err = ErrNoKey
-		}
-		args.Caller = pb.me
-		if pb.backup == "" {
-			reply.Err = OK
-			return nil
-		}
-
-		forwardArgs := GetArgs{args.Key, value, pb.primary, args.ID}
-		var backupReply GetReply
-		backupErr := call(pb.backup, "PBServer.Get", &forwardArgs, &backupReply)
-		if !backupErr {
-			// backup has failed, client doesn't need to know...
-			reply.Err = OK
-			return nil
-		}
-		if backupReply.Err == OK {
-			reply.Err = OK
-			return nil
-		} else if backupReply.Err == ErrWrongServer {
-			// the viewservice is outdated, need to ping or something
-		} else if backupReply.Err == ErrNoKey {
-			// backup is out of date
-		}
-	} else if pb.status == 2 {
-		//do backup work
-		if args.Caller == pb.primary {
-			//primary has forwarded call to us, verify we have same value for that key
-			pb.mu.Lock()
-			defer pb.mu.Unlock()
-			if args.PrimaryValue == pb.kv[args.Key] {
-				reply.Err = OK
-			} else {
-				reply.Err = ErrNoKey
-			}
-			//pb.mu.Unlock()
 		} else {
-			// only handle get if its forwarded from primary
-			reply.Err = ErrWrongServer
+			reply.Err = OK
 		}
 	} else {
 		reply.Err = ErrWrongServer
 	}
-
 	return nil
 }
 
 func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error {
-	// Your code here.
 	if pb.status == 1 {
 		if args.Caller != "Client" {
 			reply.Err = ErrWrongServer
@@ -105,78 +80,66 @@ func (pb *PBServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) error 
 		//do primary work
 		pb.mu.Lock()
 		defer pb.mu.Unlock()
-		//fmt.Printf("I am primary with id %s and my current kv is: %v\n", pb.me, pb.kv)
 		if _, prs := pb.callIDs[args.ID]; prs {
 			// we've seen this put request, discard it
-			//fmt.Printf("REPEATED PUT CALL for key %s\n", args.Key)
-			reply.Err = ErrRepeatCall
+			forwardArgs := PutAppendArgs{args.Key, pb.kv[args.Key], pb.me, "Put", args.ID}
+			var backupReply PutAppendReply
+			call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
+			if backupReply.Err != "" {
+				reply.Err = backupReply.Err
+			} else {
+				reply.Err = OK
+			}
 			return nil
 		}
-		//pb.mu.Lock()
 		if pb.kv == nil {
 			newKV := make(map[string]string)
 			newKV[args.Key] = args.Value
-			pb.callIDs[args.ID] = true
 			pb.kv = newKV
 		} else {
 			if args.Put == "Put" {
 				pb.kv[args.Key] = args.Value
-				pb.callIDs[args.ID] = true
 			} else {
 				pb.kv[args.Key] += args.Value
-				pb.callIDs[args.ID] = true
 			}
 		}
-		//pb.mu.Unlock()
+		pb.callIDs[args.ID] = true
 		if pb.backup == "" {
 			reply.Err = OK
 			return nil
 		}
-		forwardArgs := PutAppendArgs{args.Key, args.Value, pb.me, args.Put, args.ID}
+		forwardArgs := PutAppendArgs{args.Key, pb.kv[args.Key], pb.me, "Put", args.ID}
 		var backupReply PutAppendReply
-		backupErr := call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
-		if !backupErr {
-			// the backup has gone offline
-			//fmt.Println("error sending put to backup")
-			reply.Err = OK // client doesn't need to know...
-			return nil
-		}
-		if backupReply.Err == OK {
+		call(pb.backup, "PBServer.PutAppend", &forwardArgs, &backupReply)
+		if backupReply.Err != "" {
+			reply.Err = backupReply.Err
+		} else {
 			reply.Err = OK
-			return nil
-		} else if backupReply.Err == ErrWrongServer {
-			fmt.Println("error")
-			// the viewservice is outdated, need to ping or something
-		} else if backupReply.Err == ErrNoKey {
-			fmt.Println("error")
-			// backup is out of date
 		}
 	} else if pb.status == 2 {
 		//do backup work
-		//fmt.Printf("I am backup with id %s and my current kv is: %v\n", pb.me, pb.kv)
 		pb.mu.Lock()
 		defer pb.mu.Unlock()
+		if _, prs := pb.callIDs[args.ID]; prs {
+			reply.Err = OK
+			return nil
+		}
 		if args.Caller == pb.primary {
-			//pb.mu.Lock()
-			//defer pb.mu.Unlock()
 			if pb.kv == nil {
 				newKV := make(map[string]string)
 				newKV[args.Key] = args.Value
 				pb.kv = newKV
 			} else {
-				if args.Put == "Put" {
-					pb.kv[args.Key] = args.Value
-				} else {
-					pb.kv[args.Key] += args.Value
-				}
+				pb.kv[args.Key] = args.Value
 			}
-			//pb.mu.Unlock()
+			pb.callIDs[args.ID] = true
 			reply.Err = OK
 		} else {
 			reply.Err = ErrWrongServer
 		}
+	} else {
+		reply.Err = ErrWrongServer
 	}
-
 	return nil
 }
 
@@ -190,7 +153,6 @@ func (pb *PBServer) TransferKV(args *TransferKVArgs, reply *TransferReply) error
 		defer pb.mu.Unlock()
 		pb.callIDs = args.CallIDs
 		pb.kv = args.KV
-		//pb.mu.Unlock()
 		reply.Err = OK
 	}
 	return nil

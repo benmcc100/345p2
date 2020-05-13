@@ -73,19 +73,18 @@ func call(srv string, rpcname string,
 // says the key doesn't exist (has never been Put().
 //
 func (ck *Clerk) Get(key string) string {
+	//fmt.Printf("Client get called\n")
 	if ck.primary == "" {
 		ck.primary = ck.vs.Primary()
 	}
-	args := GetArgs{key, "", "Client", nrand()}
+	args := GetArgs{key, "Client", nrand()}
 	var reply GetReply
 	for {
 		err := call(ck.primary, "PBServer.Get", &args, &reply)
 		if !err {
 			ck.primary = ck.vs.Primary()
 			time.Sleep(viewservice.PingInterval)
-		}
-		if reply.Err == OK {
-			fmt.Println("Successful client get")
+		} else if reply.Err == OK {
 			return reply.Value // empty string if key does not exist
 		} else if reply.Err == ErrWrongServer {
 			// we have the wrong primary cached
@@ -111,17 +110,10 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		err := call(ck.primary, "PBServer.PutAppend", &args, &reply)
 		if !err {
 			ck.primary = ck.vs.Primary()
-		}
-		if reply.Err == OK {
-			fmt.Printf("Successful client put with key %s and value %s\n", key, value)
+		} else if reply.Err == OK {
 			return
-		} else if reply.Err == ErrWrongServer {
+		} else if reply.Err == ErrWrongServer || reply.Err == "" {
 			ck.primary = ck.vs.Primary()
-			time.Sleep(viewservice.PingInterval)
-		}
-		if reply.Err == ErrRepeatCall {
-			// the call went through!
-			return
 		}
 		time.Sleep(viewservice.PingInterval)
 	}
